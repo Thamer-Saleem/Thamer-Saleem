@@ -1,22 +1,32 @@
+import hashlib
+import hmac
+import os
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.config import get_settings
 from app.models.user import User
 
 settings = get_settings()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    salt = os.urandom(32)
+    key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 260000)
+    return salt.hex() + ":" + key.hex()
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    try:
+        salt_hex, key_hex = hashed_password.split(":")
+        salt = bytes.fromhex(salt_hex)
+        stored_key = bytes.fromhex(key_hex)
+        new_key = hashlib.pbkdf2_hmac("sha256", plain_password.encode("utf-8"), salt, 260000)
+        return hmac.compare_digest(new_key, stored_key)
+    except Exception:
+        return False
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
